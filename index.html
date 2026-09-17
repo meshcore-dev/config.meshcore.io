@@ -163,6 +163,41 @@
       </div>
     </dialog>
 
+    <dialog ref="statsDialog" class="stats-dialog">
+      <header>
+        <nav>
+          <h6>Stats</h6>
+          <span class="max"></span>
+          <button class="transparent circle" @click="refreshStats" :disabled="stats.loading">
+            <i>refresh</i>
+            <div class="tooltip left max bottom" @click.stop>Re-read stats from the device</div>
+          </button>
+          <button class="transparent circle" @click="statsDialog.close()"><i>close</i></button>
+        </nav>
+      </header>
+
+      <div v-if="stats.loading && !statsRows.length" class="row" style="align-items: center; gap: 0.75em">
+        <progress class="circle small"></progress>
+        <span>Reading stats...</span>
+      </div>
+
+      <div v-if="stats.error" class="row" style="align-items: center; gap: 0.5em; color: var(--error)">
+        <i>error</i>
+        <span>{{ stats.error }}</span>
+      </div>
+
+      <div v-if="statsRows.length" class="stats-list" :class="{ 'stats-stale': stats.loading }">
+        <div v-for="row of statsRows" :key="row.label" class="stats-row">
+          <div class="stats-label">{{ row.label }}</div>
+          <div v-for="line of row.lines" class="stats-value">{{ line }}</div>
+        </div>
+      </div>
+
+      <nav class="right-align" v-if="stats.fetchedAt">
+        <span class="small-text">Updated {{ stats.fetchedAt }}</span>
+      </nav>
+    </dialog>
+
     <dialog ref="mapDialog" class="no-round">
       <header>
         <nav>
@@ -194,6 +229,13 @@
               <span>Console</span>
               <div class="tooltip right max bottom" @click.stop>
                 Send manual CLI commands to the device
+              </div>
+            </button>
+            <button @click="openStats">
+              <i>speed</i>
+              <span>Stats</span>
+              <div class="tooltip right max bottom" @click.stop>
+                Show battery, uptime, radio and packet statistics
               </div>
             </button>
             <button @click="importConfig">
@@ -389,6 +431,10 @@
                 <option value="125">125</option>
                 <option value="250">250</option>
                 <option value="500">500</option>
+                <option value="203.125">203.125 [2.4Ghz]</option>
+                <option value="406.25">406.25 [2.4Ghz]</option>
+                <option value="812.5">812.5 [2.4Ghz]</option>
+                <option value="1625.0">1625.0 [2.4Ghz]</option>
               </select>
               <label>Bandwidth(kHz)</label>
             </div>

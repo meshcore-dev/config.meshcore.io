@@ -239,3 +239,34 @@ dialog {
 .tooltip {
   transition-property: opacity, visibility, transform;
 }
+
+/* --- Stats dialog --- */
+
+/* The generic 80vh cap cuts the list off on tall monitors; let this one use
+   nearly the whole viewport and only scroll when it genuinely has to. */
+dialog.stats-dialog {
+  max-height: calc(100vh - 2rem);
+}
+
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.25rem 0;
+  transition: opacity var(--speed2);
+}
+
+.stats-list.stats-stale {
+  opacity: 0.5;
+}
+
+.stats-label {
+  font-size: 1.05rem;
+  margin-bottom: 0.15rem;
+}
+
+.stats-value {
+  color: var(--on-surface-variant);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
