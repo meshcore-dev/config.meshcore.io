@@ -732,6 +732,115 @@ createApp({
       showMessage('Vanity key applied. Save to write to device.', 'key');
     };
 
+    // ============================ STATS ============================
+
+    // Typical single-cell Li-ion open-circuit discharge curve, (mV, %),
+    // interpolated linearly between points.
+    const LIION_CURVE = [
+      [4200, 100], [4100, 90], [4000, 80], [3900, 65], [3800, 50],
+      [3700, 30], [3600, 15], [3500, 8], [3400, 3], [3300, 0],
+    ];
+
+    /**
+     * Battery percentage from millivolts, or null when the reading cannot be a
+     * Li-ion cell (USB-powered boards report 0 or ~5 V).
+     */
+    const batteryPercent = (mv) => {
+      if (!(mv > 2500 && mv < 4500)) return null;
+      if (mv >= LIION_CURVE[0][0]) return 100;
+      const last = LIION_CURVE[LIION_CURVE.length - 1];
+      if (mv <= last[0]) return 0;
+      for (let i = 1; i < LIION_CURVE.length; i++) {
+        const [hiMv, hiPct] = LIION_CURVE[i - 1];
+        const [loMv, loPct] = LIION_CURVE[i];
+        if (mv >= loMv) {
+          return Math.round(loPct + (hiPct - loPct) * (mv - loMv) / (hiMv - loMv));
+        }
+      }
+      return 0;
+    };
+
+    /** "0 days 1h 15m 45s", matching the official app */
+    const formatDuration = (secs) => {
+      const n = Math.max(0, Math.floor(Number(secs) || 0));
+      const days = Math.floor(n / 86400);
+      const h = Math.floor((n % 86400) / 3600);
+      const m = Math.floor((n % 3600) / 60);
+      const sec = n % 60;
+      return `${days} day${days === 1 ? '' : 's'} ${h}h ${m}m ${sec}s`;
+    };
+
+    const statsDialog = ref();
+    const stats = reactive({
+      loading: false,
+      error: '',
+      fetchedAt: '',
+      core: null,
+      radio: null,
+      packets: null,
+    });
+
+    const statsRows = computed(() => {
+      const { core, radio, packets } = stats;
+      const rows = [];
+      const num = (v) => (v === undefined || v === null ? '—' : String(v));
+
+      if (core) {
+        const volts = (core.battery_mv / 1000).toFixed(2);
+        const pct = batteryPercent(core.battery_mv);
+        rows.push({ label: 'Battery', lines: [pct === null ? `${volts} V` : `${pct}% / ${volts} V`] });
+        rows.push({ label: 'Uptime', lines: [formatDuration(core.uptime_secs)] });
+      }
+      if (radio) {
+        rows.push({ label: 'Total Airtime', lines: [
+          `TX: ${formatDuration(radio.tx_air_secs)}`,
+          `RX: ${formatDuration(radio.rx_air_secs)}`,
+        ] });
+        rows.push({ label: 'Last RSSI', lines: [`${num(radio.last_rssi)} dBm`] });
+        rows.push({ label: 'Last SNR', lines: [`${num(radio.last_snr)} dB`] });
+        rows.push({ label: 'Noise Floor', lines: [`${num(radio.noise_floor)} dBm`] });
+      }
+      if (packets) {
+        rows.push({ label: 'Packets Sent', lines: [
+          `Total: ${num(packets.sent)}, Flood: ${num(packets.flood_tx)}, Direct: ${num(packets.direct_tx)}`,
+        ] });
+        rows.push({ label: 'Packets Received', lines: [
+          `Total: ${num(packets.recv)}, Flood: ${num(packets.flood_rx)}, Direct: ${num(packets.direct_rx)}`,
+        ] });
+        rows.push({ label: 'Received Packet Errors', lines: [num(packets.recv_errors)] });
+      }
+      if (core) {
+        rows.push({ label: 'Queue Length', lines: [`TX Queue: ${num(core.queue_len)}`] });
+        rows.push({ label: 'Error Flags', lines: [num(core.errors)] });
+      }
+      return rows;
+    });
+
+    const refreshStats = async () => {
+      if (stats.loading) return;
+      stats.loading = true;
+      stats.error = '';
+      try {
+        const res = await cli.getStats();
+        stats.core = res.core;
+        stats.radio = res.radio;
+        stats.packets = res.packets;
+        stats.fetchedAt = new Date().toLocaleTimeString();
+        if (!res.core && !res.radio && !res.packets) {
+          stats.error = 'This firmware does not report stats over the CLI.';
+        }
+      } catch (err) {
+        stats.error = `Could not read stats: ${err.message}`;
+      } finally {
+        stats.loading = false;
+      }
+    };
+
+    const openStats = () => {
+      statsDialog.value.show();
+      refreshStats();
+    };
+
     const reboot = async() => {
       if(!confirm('Are you sure to reboot the device?')) return;
       cli.reboot();
@@ -1159,6 +1268,7 @@ createApp({
     return {
       app, connect, disconnect,
       reboot, erase, sendAdvert, startOTA,
+      statsDialog, stats, statsRows, openStats, refreshStats,
       setData, snackbar, showMessage, setRadioPreset,
       mapDialog, showMap, setMapLatLon, requestLocation,
       dutyCycle, ownerInfoBytes, onOwnerInfoInput,
